@@ -1,0 +1,379 @@
+import React, { useState, useEffect } from 'react';
+import { Upload, Download, Play, BarChart3, Zap, Dna } from 'lucide-react';
+
+const GeneOverlapAnalyzer = () => {
+  // Sample gene sets based on Levin's research areas
+  // Auto-run analysis on component mount for accessibility
+  useEffect(() => {
+    calculateOverlaps();
+  }, []);
+
+  const [behaviorGenes, setBehaviorGenes] = useState('CACNA1C\nCOMT\nDRD2\nMAOA\nSLC6A4\nBDNF\nDISC1\nNRG1\nDTNBP1\nGRM3');
+  const [developmentGenes, setDevelopmentGenes] = useState('HOX1\nPAX6\nMSX1\nDLX1\nCACNA1C\nSLC6A4\nBDNF\nWNT3A\nSHH\nBMP4\nNOTCH1\nTBX5');
+  const [bioelectricGenes, setBioelectricGenes] = useState('KCNJ2\nSCN1A\nCACNA1C\nATP1A1\nGJA1\nKCNH2\nSCN5A\nCLCN1\nKCNQ1\nHCN4\nBDNF');
+  const [results, setResults] = useState(null);
+  const [activeTab, setActiveTab] = useState('results');
+
+  // Sample gene sets based on Levin's research areas
+  const sampleData = {
+    behavior: ['CACNA1C', 'COMT', 'DRD2', 'MAOA', 'SLC6A4', 'BDNF', 'DISC1', 'NRG1', 'DTNBP1', 'GRM3'],
+    development: ['HOX1', 'PAX6', 'MSX1', 'DLX1', 'CACNA1C', 'SLC6A4', 'BDNF', 'WNT3A', 'SHH', 'BMP4', 'NOTCH1', 'TBX5'],
+    bioelectric: ['KCNJ2', 'SCN1A', 'CACNA1C', 'ATP1A1', 'GJA1', 'KCNH2', 'SCN5A', 'CLCN1', 'KCNQ1', 'HCN4', 'BDNF']
+  };
+
+  const loadSampleData = () => {
+    setBehaviorGenes(sampleData.behavior.join('\n'));
+    setDevelopmentGenes(sampleData.development.join('\n'));
+    setBioelectricGenes(sampleData.bioelectric.join('\n'));
+  };
+
+  const parseGenes = (geneString) => {
+    return new Set(
+      geneString
+        .split(/[\n,\s]+/)
+        .map(gene => gene.trim().toUpperCase())
+        .filter(gene => gene.length > 0)
+    );
+  };
+
+  const calculateOverlaps = () => {
+    const behaviorSet = parseGenes(behaviorGenes);
+    const developmentSet = parseGenes(developmentGenes);
+    const bioelectricSet = parseGenes(bioelectricGenes);
+
+    // Pairwise overlaps
+    const behaviorDev = new Set([...behaviorSet].filter(x => developmentSet.has(x)));
+    const behaviorBio = new Set([...behaviorSet].filter(x => bioelectricSet.has(x)));
+    const devBio = new Set([...developmentSet].filter(x => bioelectricSet.has(x)));
+    
+    // Triple overlap
+    const allThree = new Set([...behaviorSet].filter(x => developmentSet.has(x) && bioelectricSet.has(x)));
+
+    const results = {
+      sets: {
+        behavior: behaviorSet,
+        development: developmentSet,
+        bioelectric: bioelectricSet
+      },
+      overlaps: {
+        behaviorDev,
+        behaviorBio,
+        devBio,
+        allThree
+      },
+      stats: {
+        behaviorSize: behaviorSet.size,
+        developmentSize: developmentSet.size,
+        bioelectricSize: bioelectricSet.size,
+        behaviorDevOverlap: behaviorDev.size,
+        behaviorBioOverlap: behaviorBio.size,
+        devBioOverlap: devBio.size,
+        tripleOverlap: allThree.size
+      }
+    };
+
+    // Calculate percentages
+    results.percentages = {
+      behaviorDevPercent: behaviorSet.size > 0 ? (behaviorDev.size / behaviorSet.size * 100) : 0,
+      behaviorBioPercent: behaviorSet.size > 0 ? (behaviorBio.size / behaviorSet.size * 100) : 0,
+      devBioPercent: developmentSet.size > 0 ? (devBio.size / developmentSet.size * 100) : 0
+    };
+
+    setResults(results);
+    setActiveTab('results');
+  };
+
+  const VennDiagram = ({ results }) => {
+    const { stats } = results;
+    
+    return (
+      <div className="relative w-80 h-80 mx-auto">
+        <svg viewBox="0 0 400 400" className="w-full h-full">
+          {/* Behavior circle */}
+          <circle
+            cx="150" cy="150" r="80"
+            fill="rgba(59, 130, 246, 0.3)"
+            stroke="rgb(59, 130, 246)"
+            strokeWidth="2"
+          />
+          {/* Development circle */}
+          <circle
+            cx="250" cy="150" r="80"
+            fill="rgba(16, 185, 129, 0.3)"
+            stroke="rgb(16, 185, 129)"
+            strokeWidth="2"
+          />
+          {/* Bioelectric circle */}
+          <circle
+            cx="200" cy="230" r="80"
+            fill="rgba(245, 101, 101, 0.3)"
+            stroke="rgb(245, 101, 101)"
+            strokeWidth="2"
+          />
+          
+          {/* Labels */}
+          <text x="120" y="120" textAnchor="middle" className="text-sm font-semibold fill-blue-600">
+            Behavior
+          </text>
+          <text x="280" y="120" textAnchor="middle" className="text-sm font-semibold fill-green-600">
+            Development  
+          </text>
+          <text x="200" y="280" textAnchor="middle" className="text-sm font-semibold fill-red-500">
+            Bioelectric
+          </text>
+          
+          {/* Overlap numbers */}
+          <text x="200" y="150" textAnchor="middle" className="text-lg font-bold">
+            {stats.behaviorDevOverlap - stats.tripleOverlap}
+          </text>
+          <text x="170" y="190" textAnchor="middle" className="text-lg font-bold">
+            {stats.behaviorBioOverlap - stats.tripleOverlap}
+          </text>
+          <text x="230" y="190" textAnchor="middle" className="text-lg font-bold">
+            {stats.devBioOverlap - stats.tripleOverlap}
+          </text>
+          <text x="200" y="180" textAnchor="middle" className="text-xl font-bold text-purple-600">
+            {stats.tripleOverlap}
+          </text>
+        </svg>
+      </div>
+    );
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto p-6 bg-gradient-to-br from-blue-50 to-purple-50 min-h-screen">
+      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6">
+          <div className="flex items-center gap-3">
+            <Zap className="w-8 h-8" />
+            <div>
+              <h1 className="text-2xl font-bold">Gene Overlap Analysis</h1>
+              <p className="text-blue-100">Exploring bioelectric patterns in Levin's research paradigm</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <div className="flex border-b">
+          <button
+            onClick={() => setActiveTab('input')}
+            className={`px-6 py-3 font-medium ${activeTab === 'input' 
+              ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' 
+              : 'text-gray-600 hover:text-blue-600'}`}
+          >
+            <Dna className="w-4 h-4 inline mr-2" />
+            Gene Input
+          </button>
+          <button
+            onClick={() => setActiveTab('results')}
+            className={`px-6 py-3 font-medium ${activeTab === 'results' 
+              ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' 
+              : 'text-gray-600 hover:text-blue-600'}`}
+            disabled={!results}
+          >
+            <BarChart3 className="w-4 h-4 inline mr-2" />
+            Analysis Results
+          </button>
+        </div>
+
+        {activeTab === 'input' && (
+          <div className="p-6">
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-lg mb-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                🚀 Welcome! This analysis is pre-loaded with sample data
+              </h3>
+              <p className="text-gray-600 mb-4">
+                You're seeing a real example based on Michael Levin's bioelectric research. The genes below represent:
+              </p>
+              <div className="grid md:grid-cols-3 gap-4 text-sm">
+                <div className="bg-blue-100 p-3 rounded">
+                  <strong className="text-blue-800">🧠 Behavior Genes:</strong> Genes linked to psychiatric conditions, learning, memory
+                </div>
+                <div className="bg-green-100 p-3 rounded">
+                  <strong className="text-green-800">🌱 Development Genes:</strong> Master regulators of body plan formation
+                </div>
+                <div className="bg-red-100 p-3 rounded">
+                  <strong className="text-red-800">⚡ Bioelectric Genes:</strong> Ion channels that create cellular "conversations"
+                </div>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  🧠 Behavior Genes
+                </label>
+                <textarea
+                  value={behaviorGenes}
+                  onChange={(e) => setBehaviorGenes(e.target.value)}
+                  placeholder="Enter genes (one per line or comma-separated)"
+                  className="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Genes associated with behavioral phenotypes
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  🌱 Development Genes
+                </label>
+                <textarea
+                  value={developmentGenes}
+                  onChange={(e) => setDevelopmentGenes(e.target.value)}
+                  placeholder="Enter genes (one per line or comma-separated)"
+                  className="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Genes involved in developmental processes
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  ⚡ Bioelectric Genes
+                </label>
+                <textarea
+                  value={bioelectricGenes}
+                  onChange={(e) => setBioelectricGenes(e.target.value)}
+                  placeholder="Enter genes (one per line or comma-separated)"
+                  className="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Ion channels, gap junctions, bioelectric signaling
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 text-center">
+              <button
+                onClick={calculateOverlaps}
+                className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-8 py-3 rounded-lg hover:from-purple-600 hover:to-pink-600 transition-all duration-200 flex items-center gap-2 mx-auto"
+              >
+                <BarChart3 className="w-5 h-5" />
+                Re-analyze with Your Changes
+              </button>
+              <p className="text-sm text-gray-500 mt-2">
+                Modify the gene lists above and click to see updated results
+              </p>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'results' && results && (
+          <div className="p-6">
+            <div className="grid lg:grid-cols-2 gap-8">
+              {/* Venn Diagram */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 text-center">
+                  Gene Set Overlaps
+                </h3>
+                <VennDiagram results={results} />
+              </div>
+
+              {/* Statistics */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-800">Analysis Summary</h3>
+                
+                <div className="grid gap-3">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-blue-800">Behavior Genes</span>
+                      <span className="text-blue-600 font-bold">{results.stats.behaviorSize}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-green-800">Development Genes</span>
+                      <span className="text-green-600 font-bold">{results.stats.developmentSize}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-red-50 p-4 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-red-800">Bioelectric Genes</span>
+                      <span className="text-red-600 font-bold">{results.stats.bioelectricSize}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 space-y-3">
+                  <h4 className="font-semibold text-gray-700">Key Overlaps</h4>
+                  
+                  <div className="bg-purple-50 p-4 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <span className="text-purple-800">Behavior ∩ Development</span>
+                      <div className="text-right">
+                        <span className="text-purple-600 font-bold">{results.stats.behaviorDevOverlap}</span>
+                        <span className="text-sm text-purple-500 ml-2">
+                          ({results.percentages.behaviorDevPercent.toFixed(1)}%)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-yellow-50 p-4 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <span className="text-yellow-800">Behavior ∩ Bioelectric</span>
+                      <div className="text-right">
+                        <span className="text-yellow-600 font-bold">{results.stats.behaviorBioOverlap}</span>
+                        <span className="text-sm text-yellow-500 ml-2">
+                          ({results.percentages.behaviorBioPercent.toFixed(1)}%)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-indigo-50 p-4 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <span className="text-indigo-800">Development ∩ Bioelectric</span>
+                      <div className="text-right">
+                        <span className="text-indigo-600 font-bold">{results.stats.devBioOverlap}</span>
+                        <span className="text-sm text-indigo-500 ml-2">
+                          ({results.percentages.devBioPercent.toFixed(1)}%)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {results.stats.tripleOverlap > 0 && (
+                    <div className="bg-gradient-to-r from-purple-100 to-pink-100 p-4 rounded-lg border-2 border-purple-200">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold text-purple-800">Triple Overlap ⚡</span>
+                        <span className="text-purple-600 font-bold text-lg">{results.stats.tripleOverlap}</span>
+                      </div>
+                      <p className="text-sm text-purple-600 mt-1">
+                        Genes appearing in all three categories - potential key bioelectric regulators!
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Detailed gene lists */}
+            {results.overlaps.allThree.size > 0 && (
+              <div className="mt-8 bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-lg">
+                <h4 className="font-semibold text-gray-800 mb-3">🔬 Triple Overlap Genes (Levin's "Cognitive Glue" Candidates)</h4>
+                <div className="flex flex-wrap gap-2">
+                  {[...results.overlaps.allThree].map(gene => (
+                    <span key={gene} className="bg-purple-200 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
+                      {gene}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-sm text-gray-600 mt-3">
+                  These genes may represent key nodes in the bioelectric networks that Levin hypothesizes enable scaling from cellular to multicellular cognition.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default GeneOverlapAnalyzer;
