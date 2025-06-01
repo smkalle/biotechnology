@@ -7,6 +7,7 @@
 This repository hosts the research article **“Vault Organelles: Structure, Mystery, and Emerging Insights.”**  
 Vaults are large, barrel-shaped ribonucleoprotein complexes present in almost all eukaryotic cells yet whose natural function remains unresolved. Leveraging recent cryo-EM breakthroughs, single-cell omics, and AI-assisted literature synthesis, we present the most comprehensive, forward-looking analysis of vault structure, evolution, and biotechnological potential to date.
 
+![mysterious_vault_organelles](./Vault_Organelles.png)
 ---
 
 ## 🔑 Keywords & Topics
