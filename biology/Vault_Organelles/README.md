@@ -26,15 +26,13 @@ Vaults are *abundant, highly conserved,* and structurally elaborate—yet organi
 3. **Demonstrate AI-augmented discovery,** showcasing how machine-assisted synthesis accelerates fundamental biology.
 
 ---
-
 ## 📂 Repository Contents
-| Path | Description |
-|------|-------------|
-| `docs/Vault_Organelles_Research_Report.pdf` | Full peer-style article (≈ 35 pp.) with figures & references |
-| `figures/` | High-resolution cryo-EM renders, schematic diagrams, and summary infographics |
-| `bib/` | Machine-readable BibTeX bibliography |
-| `README.md` | You are here |
-| `LICENSE` | MIT License text |
+| Path                                                                                                     | Description                                      |
+|----------------------------------------------------------------------------------------------------------|--------------------------------------------------|
+| `GPTResearch_Vault Organelles_ Structure, Mystery, and Emerging Insights.pdf`                            | Peer-style research article                      |
+| `GeminiResearch_Vault Organelle Mystery Deepens_.pdf`                                                    | Alternate research article or supplementary PDF  |
+| `Vault_Organelles.png`                                                                                   | Figure: mysterious_vault_organelles illustration |
+| `README.md`                                                                                              | You are here                                     |
 
 ---
 
