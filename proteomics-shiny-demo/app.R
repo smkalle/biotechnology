@@ -8,6 +8,7 @@ library(tidyverse)
 library(DT)
 library(broom)
 library(pheatmap)  # Feature 1: Sample Correlation Heatmap
+library(matrixStats)  # Feature 12: RLE plot (rowMedians function)
 
 # --- Load Data ---
 # Check if RDS exists, otherwise generate it
@@ -33,99 +34,141 @@ ui <- navbarPage(
   tabPanel(
     "Overview",
     icon = icon("chart-bar"),
-    
+
+    # Dataset Summary (always visible)
     fluidRow(
-      # Summary Stats
-      column(4,
+      column(12,
         wellPanel(
-          h4(icon("database"), " Dataset Summary"),
-          hr(),
+          h3(icon("database"), " Dataset Summary"),
           fluidRow(
-            column(4, 
+            column(3,
               div(class = "text-center",
                 h2(textOutput("n_samples"), class = "text-primary"),
                 p("Samples")
               )
             ),
-            column(4,
+            column(3,
               div(class = "text-center",
                 h2(textOutput("n_proteins"), class = "text-primary"),
                 p("Proteins")
               )
             ),
-            column(4,
+            column(3,
               div(class = "text-center",
                 h2(textOutput("n_trials"), class = "text-primary"),
                 p("Studies")
               )
+            ),
+            column(3,
+              h5("Breakdown by Trial:"),
+              tableOutput("trial_summary")
             )
-          ),
-          hr(),
-          h5("Breakdown by Trial:"),
-          tableOutput("trial_summary")
-        )
-      ),
-      
-      # Missingness Histogram
-      column(4,
-        wellPanel(
-          h4(icon("chart-area"), " Data Quality: Missingness"),
-          selectInput("miss_view", "View by:", 
-                      choices = c("Per Sample" = "sample", "Per Protein" = "protein")),
-          plotOutput("missingness_plot", height = "280px")
-        )
-      ),
-      
-      # PCA Controls
-      column(4,
-        wellPanel(
-          h4(icon("project-diagram"), " PCA Settings"),
-          selectInput("pca_color", "Color by:",
-                      choices = c("Trial" = "trial", 
-                                  "Treatment" = "treatment", 
-                                  "Response" = "response",
-                                  "Timepoint" = "timepoint")),
-          selectInput("pca_shape", "Shape by:",
-                      choices = c("None" = "none",
-                                  "Trial" = "trial",
-                                  "Treatment" = "treatment",
-                                  "Response" = "response"))
-        )
-      )
-    ),
-    
-    fluidRow(
-      column(12,
-        wellPanel(
-          h4(icon("compress-arrows-alt"), " Principal Component Analysis"),
-          plotOutput("pca_plot", height = "400px")
+          )
         )
       )
     ),
 
-    # --- Sample Correlation Heatmap (Feature 1) ---
-    fluidRow(
-      column(12,
-        wellPanel(
-          h4(icon("th"), " Sample Correlation Heatmap"),
-          p("Pearson correlation matrix showing similarity between samples. Hierarchical clustering reveals batch effects and outliers."),
-          fluidRow(
-            column(9,
-              plotOutput("correlation_heatmap", height = "500px")
-            ),
-            column(3,
-              h5(icon("cog"), " Display Options"),
-              selectInput("corr_annotation", "Color annotations:",
+    # Organized QC sections with tabsetPanel
+    tabsetPanel(
+      type = "tabs",
+
+      # Tab: Missingness & Quality
+      tabPanel(
+        "Missingness & Quality",
+        icon = icon("chart-area"),
+        br(),
+        fluidRow(
+          column(6,
+            wellPanel(
+              h4(icon("chart-area"), " Missingness Distribution"),
+              selectInput("miss_view", "View by:",
+                          choices = c("Per Sample" = "sample", "Per Protein" = "protein")),
+              plotOutput("missingness_plot", height = "300px")
+            )
+          ),
+          column(6,
+            wellPanel(
+              h4(icon("th"), " Missingness Pattern Heatmap"),
+              p("Systematic missingness patterns (MNAR vs MCAR)", class = "text-muted", style = "font-size: 12px;"),
+              plotOutput("missingness_heatmap", height = "300px"),
+              downloadButton("download_miss_heatmap", "Download PNG", class = "btn-sm")
+            )
+          )
+        ),
+        fluidRow(
+          column(6,
+            wellPanel(
+              h4(icon("chart-line"), " Relative Log Expression (RLE)"),
+              p("Boxplots should center at zero for normalized data", class = "text-muted", style = "font-size: 12px;"),
+              plotOutput("rle_plot", height = "300px"),
+              downloadButton("download_rle", "Download PNG", class = "btn-sm")
+            )
+          ),
+          column(6,
+            wellPanel(
+              h4(icon("percent"), " Coefficient of Variation (CV)"),
+              p("Distribution of protein variability across samples", class = "text-muted", style = "font-size: 12px;"),
+              plotOutput("cv_plot", height = "300px"),
+              downloadButton("download_cv", "Download PNG", class = "btn-sm")
+            )
+          )
+        )
+      ),
+
+      # Tab: PCA & Clustering
+      tabPanel(
+        "PCA & Clustering",
+        icon = icon("project-diagram"),
+        br(),
+        fluidRow(
+          column(3,
+            wellPanel(
+              h4(icon("cog"), " PCA Settings"),
+              selectInput("pca_color", "Color by:",
                           choices = c("Trial" = "trial",
                                       "Treatment" = "treatment",
                                       "Response" = "response",
-                                      "Timepoint" = "timepoint",
-                                      "None" = "none"),
-                          selected = "trial"),
-              hr(),
-              downloadButton("download_corr_plot", "Download PNG", class = "btn-primary btn-sm"),
-              br(), br(),
-              downloadButton("download_corr_pdf", "Download PDF", class = "btn-secondary btn-sm")
+                                      "Timepoint" = "timepoint")),
+              selectInput("pca_shape", "Shape by:",
+                          choices = c("None" = "none",
+                                      "Trial" = "trial",
+                                      "Treatment" = "treatment",
+                                      "Response" = "response"))
+            )
+          ),
+          column(9,
+            wellPanel(
+              h4(icon("compress-arrows-alt"), " Principal Component Analysis"),
+              plotOutput("pca_plot", height = "400px")
+            )
+          )
+        ),
+
+        # Sample Correlation Heatmap (Feature 1)
+        fluidRow(
+          column(12,
+            wellPanel(
+              h4(icon("th"), " Sample Correlation Heatmap"),
+              p("Pearson correlation matrix showing similarity between samples. Hierarchical clustering reveals batch effects and outliers."),
+              fluidRow(
+                column(9,
+                  plotOutput("correlation_heatmap", height = "500px")
+                ),
+                column(3,
+                  h5(icon("cog"), " Display Options"),
+                  selectInput("corr_annotation", "Color annotations:",
+                              choices = c("Trial" = "trial",
+                                          "Treatment" = "treatment",
+                                          "Response" = "response",
+                                          "Timepoint" = "timepoint",
+                                          "None" = "none"),
+                              selected = "trial"),
+                  hr(),
+                  downloadButton("download_corr_plot", "Download PNG", class = "btn-primary btn-sm"),
+                  br(), br(),
+                  downloadButton("download_corr_pdf", "Download PDF", class = "btn-secondary btn-sm")
+                )
+              )
             )
           )
         )
@@ -696,6 +739,223 @@ server <- function(input, output, session) {
                  show_rownames = FALSE, show_colnames = FALSE,
                  main = "Sample Correlation Heatmap (Pearson)")
       }
+
+      dev.off()
+    }
+  )
+
+  # ========================================
+  # Feature 12: Additional QC Plots
+  # ========================================
+
+  # 1. RLE (Relative Log Expression) Plot
+  output$rle_plot <- renderPlot({
+    # Get expression matrix
+    mat <- expr_wide %>%
+      column_to_rownames("protein_id") %>%
+      as.matrix()
+
+    # Calculate median protein expression across all samples
+    protein_medians <- rowMedians(mat, na.rm = TRUE)
+
+    # Subtract median from each protein (center at zero)
+    rle_mat <- mat - protein_medians
+
+    # Reshape to long format for ggplot
+    rle_data <- rle_mat %>%
+      as.data.frame() %>%
+      rownames_to_column("protein_id") %>%
+      pivot_longer(-protein_id, names_to = "sample_id", values_to = "rle") %>%
+      filter(!is.na(rle))
+
+    # Create boxplot
+    ggplot(rle_data, aes(x = sample_id, y = rle)) +
+      geom_boxplot(fill = "#3498db", alpha = 0.7, outlier.size = 0.5) +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "red", linewidth = 1) +
+      labs(x = "Sample", y = "Relative Log Expression",
+           title = "RLE Plot: Data Quality Assessment",
+           subtitle = "Boxplots should center at zero for well-normalized data") +
+      theme_minimal(base_size = 12) +
+      theme(axis.text.x = element_blank(),
+            axis.ticks.x = element_blank(),
+            plot.title = element_text(face = "bold"))
+  })
+
+  # Download RLE plot
+  output$download_rle <- downloadHandler(
+    filename = function() { paste0("rle_plot_", Sys.Date(), ".png") },
+    content = function(file) {
+      png(file, width = 10, height = 6, units = "in", res = 300)
+
+      mat <- expr_wide %>%
+        column_to_rownames("protein_id") %>%
+        as.matrix()
+      protein_medians <- rowMedians(mat, na.rm = TRUE)
+      rle_mat <- mat - protein_medians
+      rle_data <- rle_mat %>%
+        as.data.frame() %>%
+        rownames_to_column("protein_id") %>%
+        pivot_longer(-protein_id, names_to = "sample_id", values_to = "rle") %>%
+        filter(!is.na(rle))
+
+      print(ggplot(rle_data, aes(x = sample_id, y = rle)) +
+        geom_boxplot(fill = "#3498db", alpha = 0.7, outlier.size = 0.5) +
+        geom_hline(yintercept = 0, linetype = "dashed", color = "red", linewidth = 1) +
+        labs(x = "Sample", y = "Relative Log Expression",
+             title = "RLE Plot: Data Quality Assessment") +
+        theme_minimal(base_size = 14) +
+        theme(axis.text.x = element_blank(),
+              axis.ticks.x = element_blank(),
+              plot.title = element_text(face = "bold")))
+
+      dev.off()
+    }
+  )
+
+  # 2. CV (Coefficient of Variation) Plot
+  output$cv_plot <- renderPlot({
+    # Calculate CV per protein (sd/mean * 100)
+    mat <- expr_wide %>%
+      column_to_rownames("protein_id") %>%
+      as.matrix()
+
+    cv_values <- apply(mat, 1, function(x) {
+      x_clean <- x[!is.na(x)]
+      if (length(x_clean) > 1) {
+        (sd(x_clean) / mean(x_clean)) * 100
+      } else {
+        NA
+      }
+    })
+
+    cv_data <- data.frame(
+      protein_id = names(cv_values),
+      cv = cv_values
+    ) %>%
+      filter(!is.na(cv))
+
+    # Create histogram
+    ggplot(cv_data, aes(x = cv)) +
+      geom_histogram(bins = 50, fill = "#2ecc71", color = "white", alpha = 0.8) +
+      geom_vline(xintercept = median(cv_data$cv), linetype = "dashed",
+                 color = "red", linewidth = 1) +
+      geom_vline(xintercept = c(10, 30), linetype = "dotted",
+                 color = "gray50", linewidth = 0.7) +
+      annotate("text", x = median(cv_data$cv), y = Inf,
+               label = paste("Median:", round(median(cv_data$cv), 1), "%"),
+               vjust = 1.5, hjust = -0.1, color = "red") +
+      labs(x = "Coefficient of Variation (%)", y = "Number of Proteins",
+           title = "CV Distribution Across Proteins",
+           subtitle = "Typical range: 10-30% for biological data") +
+      theme_minimal(base_size = 12) +
+      theme(plot.title = element_text(face = "bold"))
+  })
+
+  # Download CV plot
+  output$download_cv <- downloadHandler(
+    filename = function() { paste0("cv_plot_", Sys.Date(), ".png") },
+    content = function(file) {
+      png(file, width = 8, height = 6, units = "in", res = 300)
+
+      mat <- expr_wide %>%
+        column_to_rownames("protein_id") %>%
+        as.matrix()
+      cv_values <- apply(mat, 1, function(x) {
+        x_clean <- x[!is.na(x)]
+        if (length(x_clean) > 1) (sd(x_clean) / mean(x_clean)) * 100 else NA
+      })
+      cv_data <- data.frame(protein_id = names(cv_values), cv = cv_values) %>%
+        filter(!is.na(cv))
+
+      print(ggplot(cv_data, aes(x = cv)) +
+        geom_histogram(bins = 50, fill = "#2ecc71", color = "white", alpha = 0.8) +
+        geom_vline(xintercept = median(cv_data$cv), linetype = "dashed",
+                   color = "red", linewidth = 1) +
+        geom_vline(xintercept = c(10, 30), linetype = "dotted", color = "gray50") +
+        annotate("text", x = median(cv_data$cv), y = Inf,
+                 label = paste("Median:", round(median(cv_data$cv), 1), "%"),
+                 vjust = 1.5, hjust = -0.1, color = "red") +
+        labs(x = "Coefficient of Variation (%)", y = "Number of Proteins",
+             title = "CV Distribution Across Proteins") +
+        theme_minimal(base_size = 14) +
+        theme(plot.title = element_text(face = "bold")))
+
+      dev.off()
+    }
+  )
+
+  # 3. Missingness Pattern Heatmap
+  output$missingness_heatmap <- renderPlot({
+    # Create binary missingness matrix
+    mat <- expr_wide %>%
+      column_to_rownames("protein_id") %>%
+      as.matrix()
+
+    # Convert to binary: 1 = missing, 0 = present
+    miss_mat <- is.na(mat) * 1
+
+    # Filter to proteins with >5% missingness for better visualization
+    protein_miss_pct <- rowMeans(miss_mat)
+    miss_mat_filtered <- miss_mat[protein_miss_pct > 0.05, ]
+
+    # If too many proteins, sample to 100
+    if (nrow(miss_mat_filtered) > 100) {
+      set.seed(42)
+      sample_idx <- sample(1:nrow(miss_mat_filtered), 100)
+      miss_mat_filtered <- miss_mat_filtered[sample_idx, ]
+    }
+
+    # Create heatmap
+    pheatmap(
+      miss_mat_filtered,
+      color = c("gray90", "#e74c3c"),
+      breaks = c(-0.1, 0.5, 1.1),
+      cluster_rows = TRUE,
+      cluster_cols = TRUE,
+      clustering_distance_rows = "binary",
+      clustering_distance_cols = "binary",
+      clustering_method = "ward.D2",
+      show_rownames = FALSE,
+      show_colnames = FALSE,
+      main = "Missingness Pattern (Gray=Present, Red=Missing)",
+      legend = FALSE,
+      fontsize = 10
+    )
+  })
+
+  # Download missingness heatmap
+  output$download_miss_heatmap <- downloadHandler(
+    filename = function() { paste0("missingness_heatmap_", Sys.Date(), ".png") },
+    content = function(file) {
+      png(file, width = 10, height = 8, units = "in", res = 300)
+
+      mat <- expr_wide %>%
+        column_to_rownames("protein_id") %>%
+        as.matrix()
+      miss_mat <- is.na(mat) * 1
+      protein_miss_pct <- rowMeans(miss_mat)
+      miss_mat_filtered <- miss_mat[protein_miss_pct > 0.05, ]
+
+      if (nrow(miss_mat_filtered) > 100) {
+        set.seed(42)
+        sample_idx <- sample(1:nrow(miss_mat_filtered), 100)
+        miss_mat_filtered <- miss_mat_filtered[sample_idx, ]
+      }
+
+      pheatmap(
+        miss_mat_filtered,
+        color = c("gray90", "#e74c3c"),
+        breaks = c(-0.1, 0.5, 1.1),
+        cluster_rows = TRUE,
+        cluster_cols = TRUE,
+        clustering_distance_rows = "binary",
+        clustering_distance_cols = "binary",
+        clustering_method = "ward.D2",
+        show_rownames = FALSE,
+        show_colnames = FALSE,
+        main = "Missingness Pattern (Gray=Present, Red=Missing)",
+        legend = FALSE
+      )
 
       dev.off()
     }
