@@ -41,8 +41,10 @@ Both generate:
 
 **R packages:**
 ```r
-install.packages(c("shiny", "tidyverse", "DT", "broom"))
+install.packages(c("shiny", "tidyverse", "DT", "broom", "pheatmap"))
 ```
+
+**Note**: `pheatmap` was added in V2 Feature 1 for sample correlation heatmaps.
 
 **Python (for generate_data.py only):**
 - Use `uv` package manager exclusively - never use `pip`
@@ -132,5 +134,57 @@ output$ma_plot <- renderPlot({
 ### Performance Characteristics
 
 - **Initial load**: <2 seconds for 500×140 dataset
-- **Differential analysis**: ~5 seconds (loops through proteins with progress bar [app.R:489-492](app.R#L489-L492))
+- **Differential analysis**: ~5 seconds (loops through proteins with progress bar)
 - **PCA**: Computed once and cached via reactive
+- **Sample correlation heatmap**: <1 second (uses same processed matrix as PCA)
+
+## V2 Features
+
+The app is being incrementally enhanced with new features. Each feature is fully implemented and tested before moving to the next.
+
+### Feature 1: Sample Correlation Heatmap ✅ (Implemented 2026-01-11)
+
+**Location**: Overview tab, below PCA plot
+
+**Purpose**: Visualize sample-to-sample similarity using Pearson correlation. Hierarchical clustering reveals batch effects, technical replicates, and outlier samples.
+
+**Implementation**:
+- **UI** ([app.R:105-132](app.R#L105-L132)): New section with interactive annotation selector and download buttons
+- **Server** ([app.R:385-565](app.R#L385-L565)):
+  - `corr_data()` reactive computes Pearson correlation matrix (140×140 samples)
+  - Uses same preprocessing as PCA (remove proteins >50% missing, row-median imputation)
+  - Hierarchical clustering with Ward's method and correlation distance
+  - Color annotations by trial, treatment, response, or timepoint
+
+**Features**:
+- Interactive annotation selector (trial, treatment, response, timepoint, none)
+- Hierarchical clustering with dendrograms
+- Color scale: blue (low) → white (mid) → red (high correlation)
+- Correlation range typically 0.6-1.0 for this dataset
+- Export buttons: PNG (300 DPI) and PDF (vector)
+
+**Code Reference**:
+```r
+# Correlation computation (reactive)
+cor_mat <- cor(mat, use = "pairwise.complete.obs")  # mat is proteins × samples
+
+# Rendering
+pheatmap(cor_mat,
+         annotation_col = annotation_df,
+         clustering_distance_rows = "correlation",
+         clustering_distance_cols = "correlation",
+         clustering_method = "ward.D2",
+         ...)
+```
+
+**Usage Notes**:
+- Outlier samples will cluster separately from their expected groups
+- Batch effects visible as distinct clusters (e.g., Trial_A vs Trial_B)
+- High correlation (>0.9) within technical replicates (if present)
+- Low correlation (<0.7) may indicate sample swaps or quality issues
+
+**Testing**:
+- Validated correlation range: 0.548-1.0 on synthetic data
+- All 140 samples cluster correctly
+- Annotations display properly for all metadata variables
+- Export functions tested (PNG and PDF)

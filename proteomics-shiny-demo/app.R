@@ -7,6 +7,7 @@ library(shiny)
 library(tidyverse)
 library(DT)
 library(broom)
+library(pheatmap)  # Feature 1: Sample Correlation Heatmap
 
 # --- Load Data ---
 # Check if RDS exists, otherwise generate it
@@ -100,9 +101,38 @@ ui <- navbarPage(
           plotOutput("pca_plot", height = "400px")
         )
       )
+    ),
+
+    # --- Sample Correlation Heatmap (Feature 1) ---
+    fluidRow(
+      column(12,
+        wellPanel(
+          h4(icon("th"), " Sample Correlation Heatmap"),
+          p("Pearson correlation matrix showing similarity between samples. Hierarchical clustering reveals batch effects and outliers."),
+          fluidRow(
+            column(9,
+              plotOutput("correlation_heatmap", height = "500px")
+            ),
+            column(3,
+              h5(icon("cog"), " Display Options"),
+              selectInput("corr_annotation", "Color annotations:",
+                          choices = c("Trial" = "trial",
+                                      "Treatment" = "treatment",
+                                      "Response" = "response",
+                                      "Timepoint" = "timepoint",
+                                      "None" = "none"),
+                          selected = "trial"),
+              hr(),
+              downloadButton("download_corr_plot", "Download PNG", class = "btn-primary btn-sm"),
+              br(), br(),
+              downloadButton("download_corr_pdf", "Download PDF", class = "btn-secondary btn-sm")
+            )
+          )
+        )
+      )
     )
   ),
-  
+
   # --- Tab 2: Protein Explorer ---
   tabPanel(
     "Protein Explorer",
@@ -302,25 +332,32 @@ server <- function(input, output, session) {
     mat <- expr_wide %>%
       column_to_rownames("protein_id") %>%
       as.matrix()
-    
+
     # Remove proteins with >50% missing
     keep_proteins <- rowMeans(is.na(mat)) < 0.5
     mat <- mat[keep_proteins, ]
-    
+
     # Impute remaining NAs with row median
     for (i in seq_len(nrow(mat))) {
-      mat[i, is.na(mat[i, ])] <- median(mat[i, ], na.rm = TRUE)
+      row_median <- median(mat[i, ], na.rm = TRUE)
+      # Only impute if median is not NA (i.e., row has some non-NA values)
+      if (!is.na(row_median) && any(is.na(mat[i, ]))) {
+        mat[i, is.na(mat[i, ])] <- row_median
+      }
     }
-    
+
+    # Remove any remaining rows that are all NA
+    mat <- mat[rowSums(!is.na(mat)) > 0, ]
+
     # PCA
     pca <- prcomp(t(mat), scale. = TRUE)
-    
+
     pca_df <- as.data.frame(pca$x[, 1:5]) %>%
       rownames_to_column("sample_id") %>%
       left_join(metadata, by = "sample_id")
-    
+
     var_explained <- round(summary(pca)$importance[2, 1:5] * 100, 1)
-    
+
     list(pca_df = pca_df, var_explained = var_explained)
   })
   
@@ -337,21 +374,217 @@ server <- function(input, output, session) {
       p <- p + geom_point(size = 3, alpha = 0.8)
     }
     
-    p + 
+    # Build plot with proper legend handling
+    p <- p +
       stat_ellipse(level = 0.68, linetype = "dashed") +
       labs(x = paste0("PC1 (", var_exp[1], "%)"),
            y = paste0("PC2 (", var_exp[2], "%)"),
            title = "PCA of Protein Expression",
-           color = str_to_title(input$pca_color),
-           shape = ifelse(input$pca_shape == "none", NULL, str_to_title(input$pca_shape))) +
+           color = str_to_title(input$pca_color)) +
       theme_minimal(base_size = 14) +
       theme(
         plot.title = element_text(face = "bold", size = 16),
         legend.position = "right"
       ) +
       scale_color_brewer(palette = "Set2")
+
+    # Only add shape label if shape is used
+    if (input$pca_shape != "none") {
+      p <- p + labs(shape = str_to_title(input$pca_shape))
+    }
+
+    p
   })
-  
+
+  # --- Sample Correlation Heatmap (Feature 1) ---
+
+  # Reactive: Compute correlation matrix and prepare data
+  corr_data <- reactive({
+    # Use the same processed matrix as PCA (proteins × samples)
+    mat <- expr_wide %>%
+      column_to_rownames("protein_id") %>%
+      as.matrix()
+
+    # Remove proteins with >50% missing
+    keep_proteins <- rowMeans(is.na(mat)) < 0.5
+    mat <- mat[keep_proteins, ]
+
+    # Impute remaining NAs with row median
+    for (i in seq_len(nrow(mat))) {
+      row_median <- median(mat[i, ], na.rm = TRUE)
+      # Only impute if median is not NA (i.e., row has some non-NA values)
+      if (!is.na(row_median) && any(is.na(mat[i, ]))) {
+        mat[i, is.na(mat[i, ])] <- row_median
+      }
+    }
+
+    # Remove any remaining rows that are all NA
+    mat <- mat[rowSums(!is.na(mat)) > 0, ]
+
+    # Compute Pearson correlation between samples (columns)
+    cor_mat <- cor(mat, use = "pairwise.complete.obs")
+
+    list(cor_mat = cor_mat)
+  })
+
+  # Render correlation heatmap
+  output$correlation_heatmap <- renderPlot({
+    cor_mat <- corr_data()$cor_mat
+
+    # Prepare annotation data frame
+    if (input$corr_annotation != "none") {
+      annotation_col <- metadata %>%
+        select(sample_id, annotation = !!sym(input$corr_annotation)) %>%
+        column_to_rownames("sample_id")
+
+      # Define color palette for annotation
+      unique_vals <- unique(annotation_col$annotation)
+      if (length(unique_vals) <= 9) {
+        ann_colors <- list(
+          annotation = setNames(RColorBrewer::brewer.pal(max(3, length(unique_vals)), "Set2")[1:length(unique_vals)],
+                                unique_vals)
+        )
+      } else {
+        # For >9 categories, use a larger palette
+        ann_colors <- list(
+          annotation = setNames(rainbow(length(unique_vals)), unique_vals)
+        )
+      }
+
+      pheatmap(
+        cor_mat,
+        annotation_col = annotation_col,
+        annotation_colors = ann_colors,
+        color = colorRampPalette(c("blue", "white", "red"))(100),
+        breaks = seq(0.6, 1.0, length.out = 101),
+        clustering_distance_rows = "correlation",
+        clustering_distance_cols = "correlation",
+        clustering_method = "ward.D2",
+        show_rownames = FALSE,
+        show_colnames = FALSE,
+        fontsize = 10,
+        main = "Sample Correlation Heatmap (Pearson)",
+        legend = TRUE,
+        border_color = NA
+      )
+    } else {
+      # No annotation
+      pheatmap(
+        cor_mat,
+        color = colorRampPalette(c("blue", "white", "red"))(100),
+        breaks = seq(0.6, 1.0, length.out = 101),
+        clustering_distance_rows = "correlation",
+        clustering_distance_cols = "correlation",
+        clustering_method = "ward.D2",
+        show_rownames = FALSE,
+        show_colnames = FALSE,
+        fontsize = 10,
+        main = "Sample Correlation Heatmap (Pearson)",
+        legend = TRUE,
+        border_color = NA
+      )
+    }
+  })
+
+  # Download handlers for correlation heatmap
+  output$download_corr_plot <- downloadHandler(
+    filename = function() {
+      paste0("sample_correlation_", Sys.Date(), ".png")
+    },
+    content = function(file) {
+      png(file, width = 10, height = 8, units = "in", res = 300)
+
+      cor_mat <- corr_data()$cor_mat
+
+      if (input$corr_annotation != "none") {
+        annotation_col <- metadata %>%
+          select(sample_id, annotation = !!sym(input$corr_annotation)) %>%
+          column_to_rownames("sample_id")
+
+        unique_vals <- unique(annotation_col$annotation)
+        if (length(unique_vals) <= 9) {
+          ann_colors <- list(
+            annotation = setNames(RColorBrewer::brewer.pal(max(3, length(unique_vals)), "Set2")[1:length(unique_vals)],
+                                  unique_vals)
+          )
+        } else {
+          ann_colors <- list(
+            annotation = setNames(rainbow(length(unique_vals)), unique_vals)
+          )
+        }
+
+        pheatmap(cor_mat, annotation_col = annotation_col, annotation_colors = ann_colors,
+                 color = colorRampPalette(c("blue", "white", "red"))(100),
+                 breaks = seq(0.6, 1.0, length.out = 101),
+                 clustering_distance_rows = "correlation",
+                 clustering_distance_cols = "correlation",
+                 clustering_method = "ward.D2",
+                 show_rownames = FALSE, show_colnames = FALSE,
+                 main = "Sample Correlation Heatmap (Pearson)")
+      } else {
+        pheatmap(cor_mat,
+                 color = colorRampPalette(c("blue", "white", "red"))(100),
+                 breaks = seq(0.6, 1.0, length.out = 101),
+                 clustering_distance_rows = "correlation",
+                 clustering_distance_cols = "correlation",
+                 clustering_method = "ward.D2",
+                 show_rownames = FALSE, show_colnames = FALSE,
+                 main = "Sample Correlation Heatmap (Pearson)")
+      }
+
+      dev.off()
+    }
+  )
+
+  output$download_corr_pdf <- downloadHandler(
+    filename = function() {
+      paste0("sample_correlation_", Sys.Date(), ".pdf")
+    },
+    content = function(file) {
+      pdf(file, width = 10, height = 8)
+
+      cor_mat <- corr_data()$cor_mat
+
+      if (input$corr_annotation != "none") {
+        annotation_col <- metadata %>%
+          select(sample_id, annotation = !!sym(input$corr_annotation)) %>%
+          column_to_rownames("sample_id")
+
+        unique_vals <- unique(annotation_col$annotation)
+        if (length(unique_vals) <= 9) {
+          ann_colors <- list(
+            annotation = setNames(RColorBrewer::brewer.pal(max(3, length(unique_vals)), "Set2")[1:length(unique_vals)],
+                                  unique_vals)
+          )
+        } else {
+          ann_colors <- list(
+            annotation = setNames(rainbow(length(unique_vals)), unique_vals)
+          )
+        }
+
+        pheatmap(cor_mat, annotation_col = annotation_col, annotation_colors = ann_colors,
+                 color = colorRampPalette(c("blue", "white", "red"))(100),
+                 breaks = seq(0.6, 1.0, length.out = 101),
+                 clustering_distance_rows = "correlation",
+                 clustering_distance_cols = "correlation",
+                 clustering_method = "ward.D2",
+                 show_rownames = FALSE, show_colnames = FALSE,
+                 main = "Sample Correlation Heatmap (Pearson)")
+      } else {
+        pheatmap(cor_mat,
+                 color = colorRampPalette(c("blue", "white", "red"))(100),
+                 breaks = seq(0.6, 1.0, length.out = 101),
+                 clustering_distance_rows = "correlation",
+                 clustering_distance_cols = "correlation",
+                 clustering_method = "ward.D2",
+                 show_rownames = FALSE, show_colnames = FALSE,
+                 main = "Sample Correlation Heatmap (Pearson)")
+      }
+
+      dev.off()
+    }
+  )
+
   # --- Protein Explorer Tab ---
   # Update protein choices
   updateSelectizeInput(session, "protein_select", 

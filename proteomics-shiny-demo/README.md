@@ -8,9 +8,13 @@ A cross-study proteomics visualization and analysis dashboard built with R/Shiny
 
 ## 🎯 Features
 
+### V1 Core Features
 - **Cross-Study Overview**: Sample/protein counts, missingness QC, and PCA visualization colored by study/treatment/response
 - **Protein Explorer**: Interactive boxplot/violin plots with t-test or Wilcoxon statistics for any protein
 - **Differential Analysis**: Compute log2 fold-change and p-values across groups with interactive volcano plot and downloadable results
+
+### V2 Enhanced Features (Incremental Updates)
+- ✅ **Sample Correlation Heatmap** (2026-01-11): Hierarchical clustering of samples with batch/treatment annotations. Identifies outliers and batch effects. Export to PNG/PDF.
 
 ## 📊 Data Schema
 
@@ -52,7 +56,7 @@ Trial_A_S002,Trial_A,Placebo,Week_4,Non-Responder,62,M
 ### Prerequisites
 
 ```r
-install.packages(c("shiny", "tidyverse", "DT", "broom"))
+install.packages(c("shiny", "tidyverse", "DT", "broom", "pheatmap"))
 ```
 
 ### Run Locally
@@ -103,6 +107,7 @@ proteomics-shiny-demo/
 - Dataset summary statistics
 - Missingness histogram (per-sample or per-protein view)
 - Interactive PCA plot with grouping options
+- **NEW**: Sample correlation heatmap with hierarchical clustering
 
 ### Protein Explorer Tab
 - Searchable protein selector (500 proteins)
@@ -124,6 +129,7 @@ proteomics-shiny-demo/
 |----------|--------|-------------|
 | Missingness | Per-row/column counting | % NA values |
 | PCA | `prcomp()` with scaling | Row-median imputation for NAs |
+| Sample correlation | Pearson correlation + hierarchical clustering | Ward's method, correlation distance |
 | Two-group comparison | Welch's t-test / Wilcoxon | User-selectable |
 | Multiple testing | Benjamini-Hochberg | `p.adjust(method="BH")` |
 
@@ -132,6 +138,7 @@ proteomics-shiny-demo/
 - **500 proteins × 140 samples** loads in <2 seconds
 - Differential analysis completes in ~5 seconds
 - PCA computed once and cached
+- Sample correlation heatmap renders in <1 second
 
 ## 🏗️ Extending the App
 
