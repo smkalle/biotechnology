@@ -15,6 +15,7 @@ A cross-study proteomics visualization and analysis dashboard built with R/Shiny
 
 ### V2 Enhanced Features (Incremental Updates)
 - ✅ **Sample Correlation Heatmap** (2026-01-11): Hierarchical clustering of samples with batch/treatment annotations. Identifies outliers and batch effects. Export to PNG/PDF.
+- ✅ **MA Plot** (2026-01-11): Complementary visualization to volcano plot showing fold change vs. average expression. Identifies intensity-dependent bias. Export both plots to high-resolution PNG.
 
 ## 📊 Data Schema
 
@@ -119,6 +120,8 @@ proteomics-shiny-demo/
 - Group comparison selector
 - Adjustable FC and p-value thresholds
 - Interactive volcano plot
+- **NEW**: MA plot for intensity-dependent bias detection
+- **NEW**: Export plots to high-resolution PNG (300 DPI)
 - Searchable results table with CSV download
 
 ## 🔧 Technical Details

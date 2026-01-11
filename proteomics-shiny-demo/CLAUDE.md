@@ -188,3 +188,47 @@ pheatmap(cor_mat,
 - All 140 samples cluster correctly
 - Annotations display properly for all metadata variables
 - Export functions tested (PNG and PDF)
+
+### Feature 2: MA Plot ✅ (Implemented 2026-01-11)
+
+**Location**: Differential Analysis tab, below volcano plot
+
+**Purpose**: Visualize relationship between fold change and average expression level to identify intensity-dependent bias in differential expression analysis.
+
+**Implementation**:
+- **UI** ([app.R:266-289](app.R#L266-L289)): New MA plot section with export buttons for both volcano and MA plots
+- **Server** ([app.R:762](app.R#L762)): Average expression calculation added to differential results
+- **Rendering** ([app.R:822-844](app.R#L822-L844)): MA plot with significance coloring
+- **Download** ([app.R:846-906](app.R#L846-L906)): PNG export handlers (300 DPI) for both plots
+
+**Features**:
+- MA plot displays M (log2 fold change) vs A (average expression)
+- Points colored by significance (red=up, blue=down, gray=not significant)
+- Horizontal reference line at y=0 (no change)
+- Threshold lines at ±FC threshold (dashed)
+- Export buttons for both volcano and MA plots as high-resolution PNG
+
+**Code Reference**:
+```r
+# Average expression calculation
+avg_expression = (mean_group_a + mean_group_b) / 2
+
+# MA plot rendering
+ggplot(df, aes(x = avg_expression, y = log2FC, color = significance)) +
+  geom_point(alpha = 0.6, size = 2) +
+  geom_hline(yintercept = 0, linetype = "solid", color = "black") +
+  geom_hline(yintercept = c(-fc_thresh, fc_thresh), linetype = "dashed") +
+  ...
+```
+
+**Usage Notes**:
+- MA plot complements volcano plot - volcano emphasizes significance, MA emphasizes expression level
+- Funnel shape (wider at low expression) is expected - low-abundance proteins have higher variance
+- Systematic curvature may indicate normalization issues
+- Both plots use same significance coloring for easy comparison
+
+**Testing**:
+- MA plot renders correctly after clicking "Run Analysis"
+- Points colored appropriately by significance status
+- Export functions produce 300 DPI PNG files
+- Works with different FC thresholds (0.5, 1, 2)

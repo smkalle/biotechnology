@@ -262,7 +262,32 @@ ui <- navbarPage(
             )
           )
         ),
-        
+
+        # --- Feature 2: MA Plot ---
+        fluidRow(
+          column(7,
+            wellPanel(
+              h4(icon("chart-line"), " MA Plot"),
+              p("M-A plot showing relationship between fold change and average expression",
+                class = "text-muted", style = "font-size: 12px;"),
+              plotOutput("ma_plot", height = "450px")
+            )
+          ),
+          column(5,
+            wellPanel(
+              h4(icon("download"), " Export Plots"),
+              downloadButton("download_volcano", "Download Volcano (PNG)",
+                             class = "btn-primary btn-sm btn-block"),
+              br(), br(),
+              downloadButton("download_ma", "Download MA Plot (PNG)",
+                             class = "btn-primary btn-sm btn-block"),
+              hr(),
+              p("High-resolution 300 DPI PNG files suitable for publication",
+                class = "text-muted", style = "font-size: 11px;")
+            )
+          )
+        ),
+
         fluidRow(
           column(12,
             wellPanel(
@@ -759,6 +784,7 @@ server <- function(input, output, session) {
       
       results %>%
         mutate(
+          avg_expression = (mean_group_a + mean_group_b) / 2,  # For MA plot
           neg_log10_pval = -log10(pvalue),
           padj = p.adjust(pvalue, method = "BH"),
           significance = case_when(
@@ -792,7 +818,93 @@ server <- function(input, output, session) {
         legend.position = "bottom"
       )
   })
-  
+
+  # --- Feature 2: MA Plot ---
+  output$ma_plot <- renderPlot({
+    req(diff_results())
+
+    df <- diff_results()
+
+    ggplot(df, aes(x = avg_expression, y = log2FC, color = significance)) +
+      geom_point(alpha = 0.6, size = 2) +
+      geom_hline(yintercept = 0, linetype = "solid", color = "black", linewidth = 0.5) +
+      geom_hline(yintercept = c(-input$fc_thresh, input$fc_thresh),
+                 linetype = "dashed", color = "gray50") +
+      scale_color_manual(values = c("Up" = "#e74c3c", "Down" = "#3498db", "NS" = "gray70")) +
+      labs(x = "Average Expression (log2)",
+           y = "Log2 Fold Change (M)",
+           title = paste("MA Plot:", input$diff_group_a, "vs", input$diff_group_b),
+           subtitle = "Identifying intensity-dependent bias",
+           color = "Direction") +
+      theme_minimal(base_size = 14) +
+      theme(
+        plot.title = element_text(face = "bold", size = 16),
+        legend.position = "bottom"
+      )
+  })
+
+  # Download handlers for plots
+  output$download_volcano <- downloadHandler(
+    filename = function() {
+      paste0("volcano_plot_", Sys.Date(), ".png")
+    },
+    content = function(file) {
+      png(file, width = 10, height = 8, units = "in", res = 300)
+
+      df <- diff_results()
+
+      p <- ggplot(df, aes(x = log2FC, y = neg_log10_pval, color = significance)) +
+        geom_point(alpha = 0.6, size = 2) +
+        geom_hline(yintercept = -log10(input$pval_thresh), linetype = "dashed", color = "gray50") +
+        geom_vline(xintercept = c(-input$fc_thresh, input$fc_thresh), linetype = "dashed", color = "gray50") +
+        scale_color_manual(values = c("Up" = "#e74c3c", "Down" = "#3498db", "NS" = "gray70")) +
+        labs(x = "Log2 Fold Change",
+             y = "-Log10 P-value",
+             title = paste(input$diff_group_a, "vs", input$diff_group_b),
+             subtitle = paste("FC threshold:", input$fc_thresh, "| P-value threshold:", input$pval_thresh),
+             color = "Direction") +
+        theme_minimal(base_size = 14) +
+        theme(
+          plot.title = element_text(face = "bold", size = 16),
+          legend.position = "bottom"
+        )
+
+      print(p)
+      dev.off()
+    }
+  )
+
+  output$download_ma <- downloadHandler(
+    filename = function() {
+      paste0("ma_plot_", Sys.Date(), ".png")
+    },
+    content = function(file) {
+      png(file, width = 10, height = 8, units = "in", res = 300)
+
+      df <- diff_results()
+
+      p <- ggplot(df, aes(x = avg_expression, y = log2FC, color = significance)) +
+        geom_point(alpha = 0.6, size = 2) +
+        geom_hline(yintercept = 0, linetype = "solid", color = "black", linewidth = 0.5) +
+        geom_hline(yintercept = c(-input$fc_thresh, input$fc_thresh),
+                   linetype = "dashed", color = "gray50") +
+        scale_color_manual(values = c("Up" = "#e74c3c", "Down" = "#3498db", "NS" = "gray70")) +
+        labs(x = "Average Expression (log2)",
+             y = "Log2 Fold Change",
+             title = paste("MA Plot:", input$diff_group_a, "vs", input$diff_group_b),
+             subtitle = "Identifying intensity-dependent bias",
+             color = "Direction") +
+        theme_minimal(base_size = 14) +
+        theme(
+          plot.title = element_text(face = "bold", size = 16),
+          legend.position = "bottom"
+        )
+
+      print(p)
+      dev.off()
+    }
+  )
+
   output$n_up <- renderText({
     req(diff_results())
     sum(diff_results()$significance == "Up")
