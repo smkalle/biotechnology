@@ -4,6 +4,7 @@ Synthetic Proteomics Data Generator
 Generates realistic cross-study proteomics data for demo purposes
 """
 
+import os
 import numpy as np
 import pandas as pd
 
@@ -101,6 +102,9 @@ expr_df = pd.DataFrame(expression_matrix, index=protein_ids, columns=sample_ids)
 expr_df.index.name = 'protein_id'
 
 # --- Save Data ---
+# Create data directory if it doesn't exist
+os.makedirs('data', exist_ok=True)
+
 expr_df.to_csv('data/expression_matrix.csv')
 metadata.to_csv('data/metadata.csv', index=False)
 

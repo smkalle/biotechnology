@@ -63,7 +63,11 @@ git clone https://github.com/yourusername/proteomics-shiny-demo.git
 cd proteomics-shiny-demo
 
 # Generate synthetic data (first run only)
+# Option 1: R version (recommended - also creates .rds file)
 Rscript R/generate_data.R
+
+# Option 2: Python version (requires uv)
+uv venv && uv pip install numpy pandas && uv run generate_data.py
 
 # Launch the app
 R -e "shiny::runApp('.')"

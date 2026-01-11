@@ -9,6 +9,7 @@ rsconnect/
 
 # Data (regenerate with generate_data.py or R/generate_data.R)
 data/*.rds
+data/*.csv
 
 # Python
 __pycache__/
@@ -19,6 +20,7 @@ venv/
 # IDE
 .idea/
 .vscode/
+.claude/
 
 # OS
 .DS_Store

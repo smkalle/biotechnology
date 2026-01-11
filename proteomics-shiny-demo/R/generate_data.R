@@ -21,7 +21,7 @@ gene_symbols <- c(
   "BCL2", "BAX", "CASP3", "FAS", "APAF1", "CYCS", "BID", "MCL1", "XIAP", "SURVIVIN",
   "CD4", "CD8A", "FOXP3", "CD25", "PD1", "PDL1", "CTLA4", "LAG3", "TIM3", "TIGIT",
   "GAPDH", "ACTB", "TUBB", "HSP90", "HSP70", "GRP78", "CALR", "CANX", "PDI", "ERO1",
-  "COX1", "COX2", "LOX", "NOS2", "HIF1A", "VEGFR2", "ANGPT1", "FGF2", "PDGFB", "TGFb1"
+  "COX1", "COX2", "LOX", "NOS2", "HIF1A", "VEGFR2", "ANGPT1", "FGF2", "PDGFB", "TGFB1"
 )
 additional_genes <- paste0("GENE", sprintf("%03d", 1:(n_proteins * 0.4 - length(gene_symbols))))
 
@@ -116,6 +116,11 @@ for (i in seq_len(n_proteins)) {
 expression_df <- as.data.frame(expression_matrix) %>%
   rownames_to_column("protein_id") %>%
   as_tibble()
+
+# Create data directory if it doesn't exist
+if (!dir.exists("data")) {
+  dir.create("data", recursive = TRUE)
+}
 
 # Save data
 write_csv(expression_df, "data/expression_matrix.csv")
