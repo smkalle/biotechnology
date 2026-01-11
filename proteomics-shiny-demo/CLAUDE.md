@@ -232,3 +232,86 @@ ggplot(df, aes(x = avg_expression, y = log2FC, color = significance)) +
 - Points colored appropriately by significance status
 - Export functions produce 300 DPI PNG files
 - Works with different FC thresholds (0.5, 1, 2)
+
+### Feature 3: Basic Clustered Heatmap ✅ (Implemented 2026-01-11)
+
+**Location**: New "Heatmap" tab (4th tab in navigation)
+
+**Purpose**: Visualize expression patterns of top differential proteins across all samples using hierarchical clustering and Z-score normalization. Reveals co-regulated proteins and sample groupings.
+
+**Implementation**:
+- **UI** ([app.R:306-392](app.R#L306-L392)): New tab with interactive controls for selection criteria, clustering options, and export buttons
+- **Server** ([app.R:1066-1094](app.R#L1066-L1094)): `heatmap_proteins()` reactive filters top N proteins from differential results
+- **Data Prep** ([app.R:1097-1139](app.R#L1097-L1139)): `heatmap_data()` reactive extracts expression matrix and applies Z-score normalization
+- **Rendering** ([app.R:1142-1171](app.R#L1142-L1171)): pheatmap visualization with hierarchical clustering
+- **Download** ([app.R:1174-1235](app.R#L1174-L1235)): PNG (300 DPI) and PDF export handlers
+
+**Features**:
+- Select top N proteins (10-200) based on p-value, adjusted p-value, or absolute fold change
+- Filter for significant proteins only (optional checkbox)
+- Z-score normalization per protein shows relative expression (red=high, blue=low, white=mean)
+- Hierarchical clustering with dendrograms (rows and columns independently toggleable)
+- Sample annotations (treatment, response, timepoint, trial)
+- Protein names shown if ≤50 proteins (readability)
+- Sample names always hidden (140 samples too dense)
+- Export to high-resolution PNG (300 DPI) or PDF
+
+**Code Reference**:
+```r
+# Z-score normalization per protein (row-wise)
+mat_scaled <- t(scale(t(mat)))  # Each protein: mean=0, sd=1
+
+# pheatmap rendering
+pheatmap(
+  mat_scaled,
+  annotation_col = annotation_df,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  clustering_distance_rows = "euclidean",
+  clustering_distance_cols = "correlation",
+  clustering_method = "ward.D2",
+  color = colorRampPalette(c("#3498db", "white", "#e74c3c"))(100),
+  breaks = seq(-3, 3, length.out = 101),  # Z-scores typically -3 to +3
+  ...
+)
+```
+
+**Data Flow**:
+1. User runs differential analysis in Differential tab
+2. Navigate to Heatmap tab, configure parameters (top N, ranking metric, annotations)
+3. Click "Generate Heatmap" button
+4. `heatmap_proteins()` eventReactive filters top proteins from `diff_results()`
+5. `heatmap_data()` reactive extracts expression matrix, applies row-median imputation, Z-score scales
+6. pheatmap renders with clustering and annotations
+
+**Usage Notes**:
+- Requires differential analysis to be run first (dependency on `diff_results()` reactive)
+- Default settings: top 50 proteins by p-value, significant only, treatment annotations
+- **Red cells**: Protein over-expressed in that sample (Z-score > 0, above protein mean)
+- **Blue cells**: Protein under-expressed in that sample (Z-score < 0, below protein mean)
+- **White cells**: Protein near its mean expression (Z-score ≈ 0)
+- **Protein clusters**: Groups of proteins with similar expression patterns (co-regulated)
+- **Sample clusters**: Groups of samples with similar expression profiles
+- Z-scores standardize each protein to same scale (mean=0, sd=1) regardless of abundance
+- Euclidean distance for proteins (standard for expression data)
+- Correlation distance for samples (captures similar patterns)
+- Ward's linkage method minimizes within-cluster variance
+
+**Interpretation Patterns**:
+- **Treatment effect**: Drug-treated samples cluster separately from placebo
+- **Response signature**: Responders vs non-responders show distinct patterns
+- **Co-regulation**: Proteins in same pathway/complex cluster together
+- **Batch effects**: If present, samples may cluster by trial rather than biology
+
+**Testing**:
+- Heatmap renders successfully after clicking "Generate Heatmap"
+- Z-score normalization applied correctly (verified mean=0, sd=1 per protein)
+- Hierarchical clustering works for both rows (proteins) and columns (samples)
+- Sample annotations display correctly for all metadata variables
+- Top N filter works across range (10-200 proteins)
+- Ranking metrics work (p-value, adjusted p-value, absolute FC)
+- "Only significant" checkbox filters correctly
+- Toggle clustering controls functional
+- Download PNG (300 DPI) and PDF both work
+- Informative message displayed if no differential results available
+- No performance issues (<2 seconds render time for 50 proteins × 140 samples)

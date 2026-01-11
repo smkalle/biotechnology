@@ -16,6 +16,7 @@ A cross-study proteomics visualization and analysis dashboard built with R/Shiny
 ### V2 Enhanced Features (Incremental Updates)
 - ✅ **Sample Correlation Heatmap** (2026-01-11): Hierarchical clustering of samples with batch/treatment annotations. Identifies outliers and batch effects. Export to PNG/PDF.
 - ✅ **MA Plot** (2026-01-11): Complementary visualization to volcano plot showing fold change vs. average expression. Identifies intensity-dependent bias. Export both plots to high-resolution PNG.
+- ✅ **Basic Clustered Heatmap** (2026-01-11): New tab showing top differential proteins with hierarchical clustering, Z-score normalization, and customizable sample annotations. Export to PNG/PDF.
 
 ## 📊 Data Schema
 
@@ -124,6 +125,15 @@ proteomics-shiny-demo/
 - **NEW**: Export plots to high-resolution PNG (300 DPI)
 - Searchable results table with CSV download
 
+### Heatmap Tab
+- Top N differential proteins selector (10-200)
+- Ranking options: p-value, adjusted p-value, or absolute fold change
+- Z-score normalized expression (per protein)
+- Hierarchical clustering with dendrograms
+- Sample annotations (treatment/response/timepoint/trial)
+- Interactive clustering toggle (rows/columns)
+- Export to high-resolution PNG (300 DPI) or PDF
+
 ## 🔧 Technical Details
 
 ### Statistical Methods
@@ -133,6 +143,7 @@ proteomics-shiny-demo/
 | Missingness | Per-row/column counting | % NA values |
 | PCA | `prcomp()` with scaling | Row-median imputation for NAs |
 | Sample correlation | Pearson correlation + hierarchical clustering | Ward's method, correlation distance |
+| Protein heatmap | Z-score normalization + hierarchical clustering | Euclidean distance (rows), correlation distance (cols) |
 | Two-group comparison | Welch's t-test / Wilcoxon | User-selectable |
 | Multiple testing | Benjamini-Hochberg | `p.adjust(method="BH")` |
 
@@ -142,6 +153,7 @@ proteomics-shiny-demo/
 - Differential analysis completes in ~5 seconds
 - PCA computed once and cached
 - Sample correlation heatmap renders in <1 second
+- Protein clustered heatmap renders in ~1-2 seconds (50 proteins)
 
 ## 🏗️ Extending the App
 

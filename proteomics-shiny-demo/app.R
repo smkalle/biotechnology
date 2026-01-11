@@ -298,6 +298,97 @@ ui <- navbarPage(
         )
       )
     )
+  ),
+
+  # ========================================
+  # TAB 4: Clustered Heatmap
+  # ========================================
+  tabPanel(
+    title = "Heatmap",
+    icon = icon("th"),
+
+    fluidRow(
+      column(12,
+        wellPanel(
+          h3(icon("fire"), " Clustered Heatmap of Top Differential Proteins"),
+          p("Visualize expression patterns of the most significant proteins across all samples.",
+            "Z-scores show how many standard deviations each value is from the protein's mean."),
+
+          fluidRow(
+            column(3,
+              h4(icon("sliders"), " Selection Criteria"),
+              helpText("Must run Differential Analysis first (previous tab)"),
+
+              numericInput("heatmap_top_n",
+                           "Number of top proteins:",
+                           value = 50, min = 10, max = 200, step = 10),
+
+              selectInput("heatmap_order_by",
+                          "Rank proteins by:",
+                          choices = c("P-value" = "pvalue",
+                                      "Adjusted P-value" = "padj",
+                                      "Absolute fold change" = "abs_fc")),
+
+              checkboxInput("heatmap_sig_only",
+                            "Only significant proteins",
+                            value = TRUE),
+
+              hr(),
+
+              selectInput("heatmap_annotation",
+                          "Sample annotations:",
+                          choices = c("Treatment" = "treatment",
+                                      "Response" = "response",
+                                      "Timepoint" = "timepoint",
+                                      "Trial" = "trial",
+                                      "None" = "none"),
+                          selected = "treatment"),
+
+              checkboxInput("heatmap_cluster_rows",
+                            "Cluster proteins (rows)",
+                            value = TRUE),
+
+              checkboxInput("heatmap_cluster_cols",
+                            "Cluster samples (columns)",
+                            value = TRUE),
+
+              hr(),
+
+              actionButton("render_heatmap",
+                           "Generate Heatmap",
+                           icon = icon("play"),
+                           class = "btn-primary btn-block"),
+
+              br(),
+
+              downloadButton("download_heatmap_png",
+                             "Download PNG",
+                             class = "btn-sm btn-block"),
+              downloadButton("download_heatmap_pdf",
+                             "Download PDF",
+                             class = "btn-sm btn-block")
+            ),
+
+            column(9,
+              wellPanel(
+                plotOutput("clustered_heatmap", height = "700px")
+              ),
+
+              wellPanel(
+                h5(icon("info-circle"), " Interpretation Guide"),
+                HTML("<ul>
+                  <li><b>Red</b>: Expression above protein mean (Z-score > 0)</li>
+                  <li><b>Blue</b>: Expression below protein mean (Z-score < 0)</li>
+                  <li><b>Dendrograms</b>: Show similarity relationships (shorter branches = more similar)</li>
+                  <li><b>Sample clusters</b>: Samples with similar expression profiles group together</li>
+                  <li><b>Protein clusters</b>: Co-regulated proteins group together</li>
+                </ul>")
+              )
+            )
+          )
+        )
+      )
+    )
   )
 )
 
@@ -959,11 +1050,187 @@ server <- function(input, output, session) {
   
   output$download_results <- downloadHandler(
     filename = function() {
-      paste0("diff_analysis_", input$diff_group_a, "_vs_", input$diff_group_b, "_", 
+      paste0("diff_analysis_", input$diff_group_a, "_vs_", input$diff_group_b, "_",
              Sys.Date(), ".csv")
     },
     content = function(file) {
       write_csv(diff_results(), file)
+    }
+  )
+
+  # ========================================
+  # Heatmap Tab - Feature 3
+  # ========================================
+
+  # Reactive: Get top proteins for heatmap based on diff results
+  heatmap_proteins <- eventReactive(input$render_heatmap, {
+    req(diff_results())
+
+    df <- diff_results()
+
+    # Filter for significant only if checkbox selected
+    if (input$heatmap_sig_only) {
+      df <- df %>% filter(significance != "NS")
+    }
+
+    # Check if we have any proteins left
+    if (nrow(df) == 0) {
+      return(NULL)
+    }
+
+    # Order by selected metric
+    df <- df %>%
+      mutate(abs_fc = abs(log2FC)) %>%
+      arrange(
+        if (input$heatmap_order_by == "pvalue") pvalue
+        else if (input$heatmap_order_by == "padj") padj
+        else desc(abs_fc)
+      )
+
+    # Take top N
+    top_proteins <- head(df$protein_id, input$heatmap_top_n)
+
+    return(top_proteins)
+  })
+
+  # Reactive: Prepare expression matrix and metadata for heatmap
+  heatmap_data <- reactive({
+    req(heatmap_proteins())
+
+    top_prots <- heatmap_proteins()
+
+    if (is.null(top_prots) || length(top_prots) == 0) {
+      return(NULL)
+    }
+
+    # Extract expression matrix for top proteins
+    mat <- expr_wide %>%
+      filter(protein_id %in% top_prots) %>%
+      column_to_rownames("protein_id") %>%
+      as.matrix()
+
+    # Reorder to match top_prots order
+    mat <- mat[top_prots[top_prots %in% rownames(mat)], ]
+
+    # Impute NAs with row median (same as PCA logic)
+    for (i in seq_len(nrow(mat))) {
+      row_median <- median(mat[i, ], na.rm = TRUE)
+      if (!is.na(row_median) && any(is.na(mat[i, ]))) {
+        mat[i, is.na(mat[i, ])] <- row_median
+      }
+    }
+
+    # Z-score normalization per protein (row)
+    mat_scaled <- t(scale(t(mat)))
+
+    # Prepare annotation data frame
+    if (input$heatmap_annotation != "none") {
+      annot_df <- metadata %>%
+        select(sample_id, annotation = !!sym(input$heatmap_annotation)) %>%
+        column_to_rownames("sample_id")
+    } else {
+      annot_df <- NULL
+    }
+
+    list(
+      matrix = mat_scaled,
+      annotation = annot_df
+    )
+  })
+
+  # Output: Clustered heatmap
+  output$clustered_heatmap <- renderPlot({
+    req(heatmap_data())
+
+    hmap_data <- heatmap_data()
+
+    if (is.null(hmap_data)) {
+      plot.new()
+      text(0.5, 0.5, "No proteins available for heatmap.\nTry adjusting filters or run differential analysis first.",
+           cex = 1.2)
+      return()
+    }
+
+    # Create heatmap using pheatmap
+    pheatmap(
+      hmap_data$matrix,
+      annotation_col = hmap_data$annotation,
+      cluster_rows = input$heatmap_cluster_rows,
+      cluster_cols = input$heatmap_cluster_cols,
+      clustering_distance_rows = "euclidean",
+      clustering_distance_cols = "correlation",
+      clustering_method = "ward.D2",
+      color = colorRampPalette(c("#3498db", "white", "#e74c3c"))(100),
+      breaks = seq(-3, 3, length.out = 101),  # Z-scores typically -3 to +3
+      show_rownames = ifelse(nrow(hmap_data$matrix) <= 50, TRUE, FALSE),  # Hide row names if >50 proteins
+      show_colnames = FALSE,  # Too many samples to show names
+      fontsize_row = 8,
+      main = paste("Top", nrow(hmap_data$matrix), "Differential Proteins"),
+      border_color = NA
+    )
+  }, height = 700)
+
+  # Download heatmap as PNG
+  output$download_heatmap_png <- downloadHandler(
+    filename = function() {
+      paste0("heatmap_top_", input$heatmap_top_n, "_", Sys.Date(), ".png")
+    },
+    content = function(file) {
+      req(heatmap_data())
+      hmap_data <- heatmap_data()
+
+      png(file, width = 12, height = 10, units = "in", res = 300)
+
+      pheatmap(
+        hmap_data$matrix,
+        annotation_col = hmap_data$annotation,
+        cluster_rows = input$heatmap_cluster_rows,
+        cluster_cols = input$heatmap_cluster_cols,
+        clustering_distance_rows = "euclidean",
+        clustering_distance_cols = "correlation",
+        clustering_method = "ward.D2",
+        color = colorRampPalette(c("#3498db", "white", "#e74c3c"))(100),
+        breaks = seq(-3, 3, length.out = 101),
+        show_rownames = ifelse(nrow(hmap_data$matrix) <= 50, TRUE, FALSE),
+        show_colnames = FALSE,
+        fontsize_row = 8,
+        main = paste("Top", nrow(hmap_data$matrix), "Differential Proteins"),
+        border_color = NA
+      )
+
+      dev.off()
+    }
+  )
+
+  # Download heatmap as PDF
+  output$download_heatmap_pdf <- downloadHandler(
+    filename = function() {
+      paste0("heatmap_top_", input$heatmap_top_n, "_", Sys.Date(), ".pdf")
+    },
+    content = function(file) {
+      req(heatmap_data())
+      hmap_data <- heatmap_data()
+
+      pdf(file, width = 12, height = 10)
+
+      pheatmap(
+        hmap_data$matrix,
+        annotation_col = hmap_data$annotation,
+        cluster_rows = input$heatmap_cluster_rows,
+        cluster_cols = input$heatmap_cluster_cols,
+        clustering_distance_rows = "euclidean",
+        clustering_distance_cols = "correlation",
+        clustering_method = "ward.D2",
+        color = colorRampPalette(c("#3498db", "white", "#e74c3c"))(100),
+        breaks = seq(-3, 3, length.out = 101),
+        show_rownames = ifelse(nrow(hmap_data$matrix) <= 50, TRUE, FALSE),
+        show_colnames = FALSE,
+        fontsize_row = 8,
+        main = paste("Top", nrow(hmap_data$matrix), "Differential Proteins"),
+        border_color = NA
+      )
+
+      dev.off()
     }
   )
 }
